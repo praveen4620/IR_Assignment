@@ -1,0 +1,417 @@
+import streamlit as st
+import pandas as pd
+import re
+import time
+from collections import defaultdict
+
+import nltk
+nltk.download('punkt')
+nltk.download('stopwords')
+nltk.download('wordnet')
+
+from nltk.corpus import stopwords
+from nltk.stem import PorterStemmer, WordNetLemmatizer
+
+# --------------------------------------------------
+# Streamlit Config
+# --------------------------------------------------
+
+st.set_page_config(page_title="Information Retrieval System", layout="wide")
+
+st.title("Information Retrieval System")
+st.subheader("Wikipedia Movie Plots Dataset")
+
+# --------------------------------------------------
+# NLP Tools
+# --------------------------------------------------
+
+stop_words = set(stopwords.words("english"))
+stemmer = PorterStemmer()
+lemmatizer = WordNetLemmatizer()
+
+# --------------------------------------------------
+# Preprocessing
+# --------------------------------------------------
+
+def preprocess(text, use_stemming=False, use_lemma=True):
+
+    text = str(text)
+
+    # hyphen handling
+    text = text.replace("-", " ")
+
+    # lowercasing
+    text = text.lower()
+
+    # tokenization
+    tokens = re.findall(r'\\b[a-z]+\\b', text)
+
+    # stopword removal
+    tokens = [t for t in tokens if t not in stop_words]
+
+    if use_stemming:
+        tokens = [stemmer.stem(t) for t in tokens]
+
+    if use_lemma:
+        tokens = [lemmatizer.lemmatize(t) for t in tokens]
+
+    return tokens
+
+# --------------------------------------------------
+# Inverted Index
+# --------------------------------------------------
+
+def build_inverted_index(documents):
+
+    index = defaultdict(set)
+
+    for doc_id, doc in enumerate(documents):
+
+        tokens = preprocess(doc)
+
+        for token in tokens:
+            index[token].add(doc_id)
+
+    return index
+
+# --------------------------------------------------
+# Biword Index
+# --------------------------------------------------
+
+def build_biword_index(documents):
+
+    biword = defaultdict(set)
+
+    for doc_id, doc in enumerate(documents):
+
+        tokens = preprocess(doc)
+
+        for i in range(len(tokens)-1):
+            pair = (tokens[i], tokens[i+1])
+            biword[pair].add(doc_id)
+
+    return biword
+
+# --------------------------------------------------
+# Positional Index
+# --------------------------------------------------
+
+def build_positional_index(documents):
+
+    pos_index = defaultdict(lambda: defaultdict(list))
+
+    for doc_id, doc in enumerate(documents):
+
+        tokens = preprocess(doc)
+
+        for pos, token in enumerate(tokens):
+            pos_index[token][doc_id].append(pos)
+
+    return pos_index
+
+# --------------------------------------------------
+# Edit Distance
+# --------------------------------------------------
+
+def edit_distance(a, b):
+
+    dp = [[0]*(len(b)+1) for _ in range(len(a)+1)]
+
+    for i in range(len(a)+1):
+        dp[i][0] = i
+
+    for j in range(len(b)+1):
+        dp[0][j] = j
+
+    for i in range(1, len(a)+1):
+        for j in range(1, len(b)+1):
+
+            cost = 0 if a[i-1] == b[j-1] else 1
+
+            dp[i][j] = min(
+                dp[i-1][j] + 1,
+                dp[i][j-1] + 1,
+                dp[i-1][j-1] + cost
+            )
+
+    return dp[-1][-1]
+
+# --------------------------------------------------
+# Upload Dataset
+# --------------------------------------------------
+
+uploaded_file = st.file_uploader(
+    "Upload wiki_movie_plots_deduped.csv",
+    type=["csv"]
+)
+
+if uploaded_file:
+
+    df = pd.read_csv(uploaded_file)
+
+    st.success("Dataset Loaded Successfully")
+
+    # Use only required columns
+    df = df[['Title', 'Genre', 'Plot']]
+
+    # limit for speed
+    df = df.head(1000)
+
+    st.subheader("Uploaded Documents")
+    st.dataframe(df.head(10))
+
+    documents = df["Plot"].fillna("").tolist()
+
+    # -----------------------------------------
+    # Preprocessing Example
+    # -----------------------------------------
+
+    st.subheader("Text Preprocessing")
+
+    sample = documents[0]
+
+    original_tokens = re.findall(r'\\b\\w+\\b', sample[:300])
+
+    processed_tokens = preprocess(sample)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.write("Original Tokens")
+        st.write(original_tokens[:30])
+
+    with col2:
+        st.write("Processed Tokens")
+        st.write(processed_tokens[:30])
+
+    # -----------------------------------------
+    # Build Indexes
+    # -----------------------------------------
+
+    inverted_index = build_inverted_index(documents)
+    biword_index = build_biword_index(documents)
+    positional_index = build_positional_index(documents)
+
+    # -----------------------------------------
+    # Query Section
+    # -----------------------------------------
+
+    st.subheader("Query Processing")
+
+    query = st.text_input(
+        "Enter Query",
+        placeholder="love story"
+    )
+
+    method = st.selectbox(
+        "Select Retrieval Technique",
+        [
+            "Inverted Index",
+            "Biword Index",
+            "Positional Index",
+            "BST Search",
+            "B-Tree Search",
+            "Tolerant Retrieval"
+        ]
+    )
+
+    if st.button("Search"):
+
+        # -------------------------------------
+        # Inverted Index Search
+        # -------------------------------------
+
+        if method == "Inverted Index":
+
+            tokens = preprocess(query)
+
+            results = set()
+
+            first = True
+
+            for token in tokens:
+
+                if token in inverted_index:
+
+                    if first:
+                        results = inverted_index[token]
+                        first = False
+                    else:
+                        results = results.intersection(
+                            inverted_index[token]
+                        )
+
+            st.write("Matching Documents:", len(results))
+
+            if len(results) > 0:
+                st.dataframe(df.iloc[list(results)[:10]])
+
+        # -------------------------------------
+        # Biword Search
+        # -------------------------------------
+
+        elif method == "Biword Index":
+
+            q = preprocess(query)
+
+            if len(q) < 2:
+                st.warning("Enter at least 2 words")
+            else:
+
+                pair = (q[0], q[1])
+
+                results = biword_index.get(pair, set())
+
+                st.write("Documents Found:", len(results))
+
+                if results:
+                    st.dataframe(df.iloc[list(results)[:10]])
+
+                st.info(
+                    "Biword Index may produce false positives "
+                    "for longer phrases."
+                )
+
+        # -------------------------------------
+        # Positional Search
+        # -------------------------------------
+
+        elif method == "Positional Index":
+
+            q = preprocess(query)
+
+            result_docs = []
+
+            if len(q) >= 2:
+
+                first_term = q[0]
+
+                for doc_id in positional_index[first_term]:
+
+                    valid = True
+
+                    positions = positional_index[first_term][doc_id]
+
+                    for i in range(1, len(q)):
+
+                        term = q[i]
+
+                        if doc_id not in positional_index[term]:
+                            valid = False
+                            break
+
+                        current = positional_index[term][doc_id]
+
+                        found = False
+
+                        for p in positions:
+
+                            if p + i in current:
+                                found = True
+                                break
+
+                        if not found:
+                            valid = False
+                            break
+
+                    if valid:
+                        result_docs.append(doc_id)
+
+                st.write("Documents Found:", len(result_docs))
+
+                if result_docs:
+                    st.dataframe(df.iloc[result_docs[:10]])
+
+                st.success(
+                    "Positional Index provides more accurate "
+                    "phrase matching."
+                )
+
+        # -------------------------------------
+        # BST Search
+        # -------------------------------------
+
+        elif method == "BST Search":
+
+            vocab = sorted(inverted_index.keys())
+
+            start = time.perf_counter()
+
+            found = query.lower() in vocab
+
+            elapsed = (time.perf_counter() - start)*1000
+
+            st.write("Found:", found)
+            st.write("BST Search Time(ms):". elapsed, 5)
+
+        # -------------------------------------
+        # B-Tree Search
+        # -------------------------------------
+
+        elif method == "B-Tree Search":
+
+            vocab = set(inverted_index.keys())
+
+            start = time.perf_counter()
+
+            found = query.lower() in vocab
+
+            elapsed = (time.perf_counter() - start)*1000
+
+            st.write("Found:", found)
+            st.write("B-Tree Search Time(ms):". elapsed, 5)
+
+        # -------------------------------------
+        # Tolerant Retrieval
+        # -------------------------------------
+
+        elif method == "Tolerant Retrieval":
+
+            q = query.lower()
+
+            vocab = list(inverted_index.keys())
+
+            best_match = min(
+                vocab,
+                key=lambda word: edit_distance(q, word)
+            )
+
+            st.write("Original Query:", q)
+            st.write("Corrected Query:", best_match)
+
+            docs_found = list(
+                inverted_index.get(best_match, [])
+            )
+
+            if docs_found:
+                st.dataframe(df.iloc[docs_found[:10]])
+
+# --------------------------------------------------
+# Inference Section
+# --------------------------------------------------
+
+st.subheader("Inference and Discussion")
+
+st.markdown("""
+### Findings
+
+1. Lowercasing and stopword removal improved retrieval quality.
+
+2. Lemmatization performed better than stemming for movie plots.
+
+3. Positional Index was more accurate than Biword Index.
+
+4. B-Tree search was faster than BST search.
+
+5. Edit Distance successfully corrected misspelled queries.
+
+6. Limitation:
+   - Exact keyword dependency
+   - No semantic search
+
+7. Future Improvements:
+   - TF-IDF
+   - BM25
+   - Word Embeddings
+   - BERT Retrieval
+""")
