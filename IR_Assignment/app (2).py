@@ -342,7 +342,7 @@ if uploaded_file:
             elapsed = (time.perf_counter() - start)*1000
 
             st.write("Found:", found)
-            st.write("BST Search Time(ms):". elapsed, 5)
+            st.write("BST Search Time(ms):", round(elapsed, 5))
 
         # -------------------------------------
         # B-Tree Search
@@ -359,7 +359,7 @@ if uploaded_file:
             elapsed = (time.perf_counter() - start)*1000
 
             st.write("Found:", found)
-            st.write("B-Tree Search Time(ms):". elapsed, 5)
+            st.write("B-Tree Search Time(ms):", round(elapsed, 5))
 
         # -------------------------------------
         # Tolerant Retrieval
