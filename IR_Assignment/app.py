@@ -53,7 +53,7 @@ def preprocess(text, use_stemming=False, use_lemma=True):
     text = text.lower()
 
     # tokenization
-    tokens = re.findall(r'\\b[a-z]+\\b', text)
+    tokens = re.findall(r'\b[a-z]+\b', text)
 
     # stopword removal
     tokens = [t for t in tokens if t not in stop_words]
@@ -179,7 +179,7 @@ if uploaded_file:
 
     sample = documents[0]
 
-    original_tokens = re.findall(r'\\b\\w+\\b', sample[:300])
+    original_tokens = re.findall(r'\b\w+\b', sample[:300])
 
     processed_tokens = preprocess(sample)
 
@@ -376,24 +376,32 @@ if uploaded_file:
 
         elif method == "Tolerant Retrieval":
 
-            q = query.lower()
+    q = query.strip().lower()
 
-            vocab = list(inverted_index.keys())
+    if not q:
+        st.warning("Please enter a query.")
+        st.stop()
 
-            best_match = min(
-                vocab,
-                key=lambda word: edit_distance(q, word)
-            )
+    vocab = list(inverted_index.keys())
 
-            st.write("Original Query:", q)
-            st.write("Corrected Query:", best_match)
+    if len(vocab) == 0:
+        st.error("Vocabulary is empty. Check dataset preprocessing.")
+        st.stop()
 
-            docs_found = list(
-                inverted_index.get(best_match, [])
-            )
+    best_match = min(
+        vocab,
+        key=lambda word: edit_distance(q, word)
+    )
 
-            if docs_found:
-                st.dataframe(df.iloc[docs_found[:10]])
+    st.write("Original Query:", q)
+    st.write("Corrected Query:", best_match)
+
+    docs_found = list(inverted_index.get(best_match, []))
+
+    if docs_found:
+        st.dataframe(df.iloc[docs_found[:10]])
+    else:
+        st.warning("No matching documents found.")
 
 # --------------------------------------------------
 # Inference Section
