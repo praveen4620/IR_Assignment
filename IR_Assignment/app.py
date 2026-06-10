@@ -7,6 +7,7 @@ Original file is located at
     https://colab.research.google.com/drive/1rJp_uUWON3DmC7GLb3ij83oebscZiljq
 """
 
+!pip install streamlit
 import streamlit as st
 import pandas as pd
 import re
@@ -376,32 +377,32 @@ if uploaded_file:
 
         elif method == "Tolerant Retrieval":
 
-    q = query.strip().lower()
+            q = query.strip().lower()
 
-    if not q:
-        st.warning("Please enter a query.")
-        st.stop()
+            if not q:
+                st.warning("Please enter a query.")
+                st.stop()
 
-    vocab = list(inverted_index.keys())
+            vocab = list(inverted_index.keys())
 
-    if len(vocab) == 0:
-        st.error("Vocabulary is empty. Check dataset preprocessing.")
-        st.stop()
+            if len(vocab) == 0:
+                st.error("Vocabulary is empty. Check dataset preprocessing.")
+                st.stop()
 
-    best_match = min(
-        vocab,
-        key=lambda word: edit_distance(q, word)
-    )
+            best_match = min(
+                vocab,
+                key=lambda word: edit_distance(q, word)
+            )
 
-    st.write("Original Query:", q)
-    st.write("Corrected Query:", best_match)
+            st.write("Original Query:", q)
+            st.write("Corrected Query:", best_match)
 
-    docs_found = list(inverted_index.get(best_match, []))
+            docs_found = list(inverted_index.get(best_match, []))
 
-    if docs_found:
-        st.dataframe(df.iloc[docs_found[:10]])
-    else:
-        st.warning("No matching documents found.")
+            if docs_found:
+                st.dataframe(df.iloc[docs_found[:10]])
+            else:
+                st.warning("No matching documents found.")
 
 # --------------------------------------------------
 # Inference Section
